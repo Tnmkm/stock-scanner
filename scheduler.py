@@ -20,6 +20,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 import config as C
 import dashboard
+import market_context as mc
 import notify
 import portfolio
 import premarket_scanner as A
@@ -54,19 +55,39 @@ def run_b(force=False):
         b = {"status": "ok", "hits": [], "checked": 0}
     data = A.load_today(now.date())
     a_hits = data["latest"]["hits"] if data else []
-    alerts = []
+    alerts, snap = [], None
     try:
         snap = portfolio.snapshot(now)
         alerts = portfolio.new_alerts(snap, now)
     except Exception:
         log.exception("Portfolio check crashed")
-    msg = notify.format_message(a_hits, b, now, alerts)
+    ctx = build_context(now, a_hits, b, snap, data)
+    msg = notify.format_message(a_hits, b, now, alerts, ctx)
     if force:
         notify.send(msg, priority=True)
     else:
         notify.send_if_changed(msg, now, priority=bool(alerts))
     _refresh_dashboard()
     log.info("Scanner B: %s, %d hits, %d new alerts", b["status"], len(b["hits"]), len(alerts))
+
+
+def build_context(now, a_hits, b, snap, a_data):
+    """Market regime, earnings flags, position sizes and data coverage for the message."""
+    ctx = {}
+    try:
+        reg = (snap or {}).get("market") or mc.regime()
+        ctx["regime_line"] = mc.regime_line(reg)
+        tickers = list(dict.fromkeys([h["ticker"] for h in a_hits] + [h["ticker"] for h in b["hits"]]))
+        ed = mc.next_earnings(tickers, now.date()) if tickers else {}
+        ctx["earnings_days"] = {t: n for t, d in ed.items()
+                                if (n := mc.earnings_soon(d, now.date())) is not None}
+        ctx["sizing"] = {h["ticker"]: sz for h in b["hits"]
+                         if (sz := mc.position_size(h["price"], h["stop_ref"]))}
+        if a_data and a_data.get("latest"):
+            ctx["coverage_pct"] = a_data["latest"].get("coverage_pct")
+    except Exception:
+        log.exception("Context build failed")
+    return ctx
 
 
 def _refresh_dashboard():

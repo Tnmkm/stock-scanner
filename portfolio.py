@@ -19,6 +19,7 @@ from datetime import datetime
 import pandas as pd
 
 import config as C
+import market_context as mc
 import market_data as md
 from premarket_scanner import get_catalyst
 
@@ -113,6 +114,10 @@ def check_alerts(s: dict) -> list[dict]:
     if s.get("target") and s["price"] >= s["target"]:
         a.append({"ticker": s["ticker"], "kind": "target",
                   "text": f"🎯 {s['ticker']} ${s['price']} ถึงเป้า ${s['target']}"})
+    n = s.get("earnings_in_days")
+    if n is not None and n <= 3:
+        a.append({"ticker": s["ticker"], "kind": "earnings",
+                  "text": f"📅 {s['ticker']} ประกาศงบ{'วันนี้' if n == 0 else f'ใน {n} วัน'} ({s['earnings_date']}) ราคาอาจเหวี่ยงแรง"})
     if s.get("live", True) and abs(s["day_change_pct"]) >= C.BIG_MOVE_PCT:
         arrow = "🚀" if s["day_change_pct"] > 0 else "⚠️"
         a.append({"ticker": s["ticker"], "kind": "move_up" if s["day_change_pct"] > 0 else "move_down",
@@ -136,6 +141,14 @@ def snapshot(now: datetime | None = None, with_news=True) -> dict:
         if with_news:
             s["news"], s["news_source"] = get_catalyst(h["ticker"])
         rows.append(s)
+    try:
+        ed = mc.next_earnings([r["ticker"] for r in rows], now.date())
+    except Exception as e:
+        log.warning("earnings lookup failed: %s", e)
+        ed = {}
+    for r in rows:
+        r["earnings_date"] = ed.get(r["ticker"])
+        r["earnings_in_days"] = mc.earnings_soon(r["earnings_date"], now.date())
     total_value = sum(r["value"] for r in rows)
     costed = [r for r in rows if r["avg_cost"]]
     total_cost = sum(r["avg_cost"] * r["shares"] for r in costed)
@@ -149,7 +162,8 @@ def snapshot(now: datetime | None = None, with_news=True) -> dict:
         "pl_pct": round((sum(r["value"] for r in costed) / total_cost - 1) * 100, 2) if total_cost else None,
         "day_pl": round(day_pl, 2),
     }
-    snap = {"as_of": now.isoformat(timespec="seconds"), "holdings": rows, "totals": totals}
+    snap = {"as_of": now.isoformat(timespec="seconds"), "holdings": rows, "totals": totals,
+            "market": mc.regime()}
     C.RESULTS_DIR.mkdir(exist_ok=True)
     (C.RESULTS_DIR / "portfolio_latest.json").write_text(json.dumps(snap, indent=2, ensure_ascii=False))
     return snap
@@ -180,11 +194,14 @@ def format_summary(snap: dict, now: datetime) -> str:
           if t.get("pl") is not None and t.get("pl_pct") is not None else "")
     day = 0.0 if abs(t["day_pl"]) < 0.005 else t["day_pl"]
     lines.append(f"มูลค่า ${t['value']:,.2f} | วันนี้ {day:+,.2f}{pl}")
+    if snap.get("market"):
+        lines.append(mc.regime_line(snap["market"]))
     lines.append("")
     for s in sorted(snap["holdings"], key=lambda r: -r["value"]):
         pl = f" | P/L {s['pl_pct']:+.1f}%" if s.get("pl_pct") is not None else ""
         trend = {"up": "📈", "down": "📉", "mixed": "↔️"}[s["trend"]]
-        lines.append(f"{trend} {s['ticker']} ${s['price']} ({s['day_change_pct']:+.1f}%){pl}")
+        earn = f" 📅 งบ {s['earnings_date']}" if s.get("earnings_in_days") is not None else ""
+        lines.append(f"{trend} {s['ticker']} ${s['price']} ({s['day_change_pct']:+.1f}%){pl}{earn}")
         lvl = []
         if s.get("support_20d"):
             lvl.append(f"รับ {s['support_20d']}")

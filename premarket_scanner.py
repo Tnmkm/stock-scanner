@@ -112,6 +112,7 @@ def scan(now: datetime | None = None) -> list[dict]:
     universe = load_universe()
     log.info("Universe: %d tickers", len(universe))
     daily = md.daily_bars(universe, period="5d")
+    coverage = round(len(daily) / len(universe) * 100) if universe else 0
     intra = md.intraday_bars(list(daily))
     hits = []
     for t in intra:
@@ -126,7 +127,7 @@ def scan(now: datetime | None = None) -> list[dict]:
     hits = hits[: C.MAX_RESULTS]
     for h in hits:
         h["catalyst"], h["catalyst_source"] = get_catalyst(h["ticker"])
-    save(hits, now)
+    save(hits, now, coverage)
     return hits
 
 
@@ -135,11 +136,12 @@ def results_path(d):
     return C.RESULTS_DIR / f"premarket_{d.isoformat()}.json"
 
 
-def save(hits, now):
+def save(hits, now, coverage=None):
     C.RESULTS_DIR.mkdir(exist_ok=True)
     p = results_path(now.date())
     data = json.loads(p.read_text()) if p.exists() else {"date": now.date().isoformat(), "runs": []}
-    data["runs"].append({"run_at": now.isoformat(timespec="seconds"), "hits": hits})
+    data["runs"].append({"run_at": now.isoformat(timespec="seconds"), "hits": hits,
+                         "coverage_pct": coverage})
     data["latest"] = data["runs"][-1]
     seen = dict.fromkeys(data.get("all_tickers", []))
     seen.update(dict.fromkeys(h["ticker"] for h in hits))
