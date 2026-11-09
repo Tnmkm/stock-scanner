@@ -1,0 +1,28 @@
+//@version=6
+// Trend-join Long — same rules as strategy_scanner.py, for TradingView charts/alerts.
+// Use a 1-5 min chart with "Extended trading hours" ON (needed for the pre-market high).
+indicator("Trend-join Long", overlay = true)
+
+yHigh  = request.security(syminfo.tickerid, "D", high[1],               lookahead = barmerge.lookahead_on)
+yClose = request.security(syminfo.tickerid, "D", close[1],              lookahead = barmerge.lookahead_on)
+ySma   = request.security(syminfo.tickerid, "D", ta.sma(close, 200)[1], lookahead = barmerge.lookahead_on)
+
+var float pmHigh = na
+var float hod    = na
+if timeframe.change("D")
+    pmHigh := na
+    hod    := na
+
+priorHod = hod                       // high of day before this bar
+if session.ispremarket
+    pmHigh := na(pmHigh) ? high : math.max(pmHigh, high)
+if session.ismarket
+    hod := na(hod) ? high : math.max(hod, high)
+
+afterTen = hour(time, "America/New_York") >= 10
+signal = session.ismarket and afterTen and close > yHigh and yClose > ySma and not na(pmHigh) and close > pmHigh and not na(priorHod) and close > priorHod
+
+plot(yHigh,  "Yesterday high", color.orange, style = plot.style_linebr)
+plot(pmHigh, "Pre-market high", color.aqua,  style = plot.style_linebr)
+plotshape(signal, "Entry", shape.triangleup, location.belowbar, color.lime, size = size.small)
+alertcondition(signal, "Trend-join Long", "{{ticker}} Trend-join Long entry @ {{close}}")
