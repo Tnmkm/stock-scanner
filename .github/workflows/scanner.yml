@@ -1,0 +1,92 @@
+name: Stock scanner
+
+on:
+  schedule:
+    # Every 30 min, Mon-Fri, 12:00-21:59 UTC. covers 08:30-16:xx ET in both EST and EDT.
+    # cloud_run.py decides what is actually due from US Eastern time.
+    - cron: "*/30 12-21 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run now regardless of time"
+        type: choice
+        options: ["", "scan", "summary", "all"]
+        default: ""
+
+concurrency:
+  group: stock-scanner
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # results/ (scan history, alert de-dup, LINE dedupe) is kept in the private
+      # Actions cache - never published - so portfolio data stays off the public site.
+      - name: Restore saved results
+        uses: actions/cache/restore@v4
+        with:
+          path: results
+          key: results-${{ github.run_id }}
+          restore-keys: results-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Run scanners
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BENZINGA_API_KEY: ${{ secrets.BENZINGA_API_KEY }}
+          PORTFOLIO_CSV: ${{ secrets.PORTFOLIO_CSV }}
+        run: |
+          if [ -n "${{ inputs.force }}" ]; then
+            python cloud_run.py --force "${{ inputs.force }}"
+          else
+            python cloud_run.py
+          fi
+
+      - name: Save results
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: results
+          key: results-${{ github.run_id }}
+
+      - name: Build password-protected dashboard
+        env:
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: |
+          if [ -z "$DASHBOARD_PASSWORD" ]; then
+            echo "::error::DASHBOARD_PASSWORD secret is missing - dashboard not published"
+            exit 1
+          fi
+          rm -rf publish && mkdir publish
+          npx --yes staticrypt@3 results/dashboard.html -p "$DASHBOARD_PASSWORD" \
+            -d publish --short --remember 30 --config false \
+            --template-title "Stock Dashboard" --template-instructions "ใส่รหัสผ่านเพื่อดูพอร์ต"
+          mv publish/dashboard.html publish/index.html
+          touch publish/.nojekyll
+
+      - name: Publish to gh-pages (encrypted page only)
+        run: |
+          cd publish
+          git init -q
+          git checkout -q -b gh-pages
+          git config user.name "stock-scanner-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Update $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
