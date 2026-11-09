@@ -86,4 +86,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.getLogger("cloud").exception("run failed")
+        try:
+            import notify
+            notify.send(f"⚠️ Stock scanner error: {type(e).__name__}: {str(e)[:200]}\n"
+                        "ดูรายละเอียดที่แท็บ Actions บน GitHub", priority=True)
+        except Exception:
+            pass
+        raise

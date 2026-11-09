@@ -39,6 +39,14 @@ PORTFOLIO_SUMMARY_TIME = time(16, 10)   # daily summary after the close (ET) = ~
 # LINE free plan = 300 pushes/month. Below this many left, only alerts + daily summary are sent.
 LINE_QUOTA_RESERVE = 40
 
+# ---- Risk & context ----
+# Account size for position sizing on Scanner B hits (0 = sizing off). Can also come from env.
+ACCOUNT_SIZE_USD = float(os.getenv("ACCOUNT_SIZE_USD", "0") or 0)
+RISK_PER_TRADE_PCT = 2.0      # max loss per trade if the stop is hit (% of account)
+MAX_POSITION_PCT = 25.0       # never put more than this % of the account in one stock
+EARNINGS_WARN_DAYS = 7        # flag stocks reporting earnings within this many days
+LOW_DATA_PCT = 50             # warn when fewer than this % of tickers downloaded
+
 # ---- Schedule (ET, weekdays) ----
 PREMARKET_FIRST = time(8, 30)
 PREMARKET_LAST = time(14, 0)

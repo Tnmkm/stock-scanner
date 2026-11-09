@@ -73,6 +73,16 @@ python scheduler.py            # รันตามตารางเวลา �
 
 ทดสอบ: `python portfolio.py` (แสดงผลเฉยๆ) หรือ `python portfolio.py --send` (ส่งสรุปเข้า LINE ทันที)
 
+## ฟีเจอร์ช่วยบริหารความเสี่ยง
+
+- **สภาพตลาด** ทุกข้อความและหน้า Dashboard บอกว่าตลาดอยู่โหมดไหน จาก SPY/QQQ เทียบเส้นค่าเฉลี่ย และระดับ VIX
+  🟢 ขาขึ้น · 🟡 ระวัง · 🔴 อ่อนแอ (SPY ต่ำกว่า SMA200 หรือ VIX ≥ 30) ควรลดขนาดไม้หรืองดเทรด
+- **เตือนวันประกาศงบ** 📅 ติดป้ายหุ้นที่จะประกาศงบภายใน 7 วัน และแจ้งเตือนหุ้นในพอร์ตก่อนงบออก 3 วัน
+- **ขนาดไม้แนะนำ** ใส่ `ACCOUNT_SIZE_USD` (ใน `.env` หรือ GitHub Secret) แล้วสัญญาณ Scanner B
+  จะบอกจำนวนหุ้นที่ซื้อได้ โดยถ้าโดน stop จะเสียไม่เกิน 2% ของพอร์ต และไม่เกิน 25% ของพอร์ตต่อหนึ่งตัว
+  (ปรับได้ที่ `RISK_PER_TRADE_PCT`, `MAX_POSITION_PCT` ใน `config.py`)
+- **แจ้งเตือนเมื่อระบบมีปัญหา** ถ้ารันพังหรือดึงข้อมูลได้น้อยกว่า 50% จะส่งเตือนเข้า LINE ทันที
+
 ## รันออนไลน์ด้วย GitHub Actions (ไม่ต้องเปิดคอม)
 
 ไฟล์ `.github/workflows/scanner.yml` สั่งให้ GitHub รัน `cloud_run.py` ทุก 30 นาที วันจันทร์–ศุกร์
@@ -86,6 +96,7 @@ python scheduler.py            # รันตามตารางเวลา �
 | `LINE_USER_ID` | User ID ของคุณ (ขึ้นต้นด้วย U) |
 | `PORTFOLIO_CSV` | เนื้อหาไฟล์ portfolio.csv ทั้งไฟล์ |
 | `DASHBOARD_PASSWORD` | รหัสผ่านสำหรับเปิดหน้า Dashboard |
+| `ACCOUNT_SIZE_USD` | ขนาดพอร์ตเป็น USD เช่น `330` (ไม่บังคับ ใช้คำนวณขนาดไม้) |
 | `DISCORD_WEBHOOK_URL`, `BENZINGA_API_KEY` | ไม่บังคับ |
 
 **เปิด Dashboard:** Settings → Pages → Source: Deploy from a branch → `gh-pages` / root
