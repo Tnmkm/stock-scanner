@@ -1,0 +1,8 @@
+# personal data and secrets never go to GitHub
+.env
+portfolio.csv
+results/
+venv/
+_old/
+__pycache__/
+.yf_cache/
