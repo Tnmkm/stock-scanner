@@ -16,11 +16,19 @@ log = logging.getLogger("notify")
 TEXT_LIMIT = 1900  # Discord max is 2000 chars per message
 
 
-def format_message(a_hits, b_result, now, alerts=None) -> str:
+def _earn_tag(ticker, ctx):
+    n = (ctx or {}).get("earnings_days", {}).get(ticker)
+    return f" 📅 งบใน {n} วัน" if n is not None else ""
+
+
+def format_message(a_hits, b_result, now, alerts=None, ctx=None) -> str:
+    """ctx (optional): {'regime_line': str, 'earnings_days': {ticker: days},
+                        'sizing': {ticker: {...}}, 'coverage_pct': int}"""
+    ctx = ctx or {}
     lines = ["[Scanner A: Pre-market Gappers]"]
     if a_hits:
         for i, h in enumerate(a_hits, 1):
-            lines.append(f"{i}. {h['ticker']} | ${h['price']:.2f} | +{h['gap_pct']:.1f}%")
+            lines.append(f"{i}. {h['ticker']} | ${h['price']:.2f} | +{h['gap_pct']:.1f}%{_earn_tag(h['ticker'], ctx)}")
             lines.append(f"   📰 {h['catalyst']}")
     else:
         lines.append("No stocks met the criteria.")
@@ -35,12 +43,19 @@ def format_message(a_hits, b_result, now, alerts=None) -> str:
         lines.append(f"No valid entry ({b_result['checked']} checked).")
     else:
         for i, h in enumerate(b_result["hits"], 1):
-            lines.append(f"{i}. {h['ticker']} ✅ Entry ~${h['price']:.2f}")
+            lines.append(f"{i}. {h['ticker']} ✅ Entry ~${h['price']:.2f}{_earn_tag(h['ticker'], ctx)}")
             lines.append(f"   > Y-High ${h['yesterday_high']} | PM-High ${h['premarket_high']}"
                          f" | HOD ${h['hod_before_bar']} | 200SMA ${h['sma200']}")
             lines.append(f"   Stop ref ${h['stop_ref']} (-{h['risk_pct']}%)")
+            sz = ctx.get("sizing", {}).get(h["ticker"])
+            if sz:
+                lines.append(f"   Size {sz['shares']} หุ้น (~${sz['cost_usd']:,.0f}, เสี่ยง ${sz['risk_usd']:,.0f})")
     if alerts:
         lines += ["", "[Price Alerts: My Portfolio]"] + [a["text"] for a in alerts]
+    if ctx.get("coverage_pct") is not None and ctx["coverage_pct"] < C.LOW_DATA_PCT:
+        lines += ["", f"⚠️ ดึงข้อมูลได้แค่ {ctx['coverage_pct']}% ของหุ้นที่สแกน ผลอาจไม่ครบ"]
+    if ctx.get("regime_line"):
+        lines += ["", ctx["regime_line"]]
     lines += ["", f"⏱ {now.strftime('%H:%M')} ET"]
     return "\n".join(lines)
 

@@ -9,6 +9,7 @@ import yfinance as yf
 from config import BASE_DIR, ET
 
 log = logging.getLogger(__name__)
+LAST_COVERAGE = {"ok": 0, "total": 0}   # of the most recent download() call
 CHUNK = 40      # tickers per request batch
 THREADS = 4     # parallel connections; macOS allows only 256 open files by default
 
@@ -75,6 +76,7 @@ def download(tickers: list[str], **kwargs) -> dict[str, pd.DataFrame]:
     if missing:
         out.update(_download_once(missing, **kwargs))
         missing = [t for t in tickers if t not in out]
+    LAST_COVERAGE.update(ok=len(out), total=len(tickers))
     log.info("Downloaded %d/%d tickers (%s)", len(out), len(tickers),
              kwargs.get("interval", ""))
     if missing and len(missing) > len(tickers) * 0.5:

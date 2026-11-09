@@ -72,7 +72,7 @@ def build(alerts=None) -> str:
         news = escape(s.get("news") or "")
         rows.append(f"""
 <tr>
-  <td><b>{s['ticker']}</b><div class="muted small">{s['shares']:g} หุ้น @ {s['avg_cost'] or '–'}</div></td>
+  <td><b>{s['ticker']}</b>{f' <span class="badge">📅 งบ {s["earnings_date"][5:]}</span>' if s.get('earnings_in_days') is not None else ''}<div class="muted small">{s['shares']:g} หุ้น @ {s['avg_cost'] or '–'}</div></td>
   <td class="num">${s['price']:,.2f}<div class="small">{_sign(s['day_change_pct'], pct=True)}</div></td>
   <td class="num">${s['value']:,.2f}<div class="bar"><i style="width:{s.get('weight_pct', 0)}%"></i></div><div class="muted small">{s.get('weight_pct', 0)}%</div></td>
   <td class="num">{_sign(s.get('pl'), money=True)}<div class="small">{_sign(s.get('pl_pct'), pct=True)}</div></td>
@@ -96,6 +96,16 @@ def build(alerts=None) -> str:
     ) or f"<tr><td colspan='6' class='muted'>{'ยังไม่มีสัญญาณ (เริ่มหลัง 10:00 ET)' if not b_run else 'ไม่มีหุ้นผ่านครบทุกเงื่อนไข'}</td></tr>"
     alert_html = "".join(f"<li>{escape(a['text'])}</li>" for a in alerts)
     as_of = snap.get("as_of", "")[:16].replace("T", " ")
+    m = snap.get("market")
+    if m:
+        cls = {"Risk-on": "up", "Risk-off": "down"}.get(m["label"], "")
+        th = {"Risk-on": "ขาขึ้น", "Caution": "ระวัง", "Risk-off": "อ่อนแอ"}[m["label"]]
+        vix = f" · VIX {m['vix']}" if m.get("vix") else ""
+        market_card = (f'<div class="card kpi"><div class="label">สภาพตลาด</div>'
+                       f'<div class="val {cls}">{th}</div><div class="small muted">SPY '
+                       f'{m["spy"]["day_pct"]:+.1f}% · QQQ {m["qqq"]["day_pct"]:+.1f}%{vix}</div></div>')
+    else:
+        market_card = ""
 
     return f"""<!doctype html>
 <html lang="th"><head><meta charset="utf-8">
@@ -122,6 +132,7 @@ td{{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}}tr.news 
 .spark .sl{{stroke:var(--down);stroke-dasharray:3 3;stroke-width:1;opacity:.6}}
 .alerts{{border-color:var(--down)}}.alerts ul{{margin:0;padding-left:18px}}
 footer{{color:var(--muted);font-size:12px;text-align:center}}
+.badge{{font-size:11px;font-weight:500;padding:1px 6px;border-radius:8px;background:var(--line);white-space:nowrap}}
 </style></head><body><main>
 <div class="head"><h1>📊 Stock Dashboard</h1><span class="muted small">อัปเดต {escape(as_of)} ET · รีเฟรชเองทุก 5 นาที</span></div>
 
@@ -129,6 +140,7 @@ footer{{color:var(--muted);font-size:12px;text-align:center}}
   <div class="card kpi"><div class="label">มูลค่าพอร์ต</div><div class="val">${t.get('value', 0):,.2f}</div></div>
   <div class="card kpi"><div class="label">กำไร/ขาดทุนวันนี้</div><div class="val">{_sign(t.get('day_pl'), money=True)}</div></div>
   <div class="card kpi"><div class="label">กำไร/ขาดทุนรวม</div><div class="val">{_sign(t.get('pl'), money=True)}</div><div class="small">{_sign(t.get('pl_pct'), pct=True)}</div></div>
+  {market_card}
   <div class="card kpi"><div class="label">สัญญาณวันนี้</div><div class="val">{len(a_hits)} <span class="muted small">gappers</span> · {len(b_hits)} <span class="muted small">entries</span></div></div>
 </div>
 
