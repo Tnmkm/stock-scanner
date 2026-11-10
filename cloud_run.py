@@ -56,6 +56,8 @@ def main():
     if forced in ("scan", "all"):
         A.scan(now)
         S.run_b(force=True)
+    if forced == "export":
+        return
     if forced in ("summary", "all"):
         S.run_summary(force=True)
     if forced:

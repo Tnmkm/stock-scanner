@@ -1,0 +1,8 @@
+# Tickers shown on the online dashboard (market data only; shares and costs stay private)
+VOO
+NVDA
+IREN
+MSFT
+OKLO
+GOOG
+AMD
