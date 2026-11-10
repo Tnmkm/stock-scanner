@@ -37,6 +37,30 @@ def load_watchlist() -> list[str]:
     return [h["ticker"] for h in P.load_portfolio()]
 
 
+def extra_stats(df, today) -> dict:
+    """52-week range, period returns, volume, 1-year closes."""
+    d = df.dropna(subset=["Close"])
+    c = d["Close"]
+    price = float(c.iloc[-1])
+
+    def ret(n):
+        return round((price / float(c.iloc[-1 - n]) - 1) * 100, 2) if len(c) > n else None
+
+    prev_year = c[[ts.year < today.year for ts in c.index]]
+    ytd = round((price / float(prev_year.iloc[-1]) - 1) * 100, 2) if len(prev_year) else None
+    vol = d["Volume"].fillna(0)
+    hi, lo = float(d["High"].max()), float(d["Low"].min())
+    return {
+        "high_52w": round(hi, 2), "low_52w": round(lo, 2),
+        "pct_from_high": round((price / hi - 1) * 100, 2),
+        "pct_from_low": round((price / lo - 1) * 100, 2),
+        "ret_1w": ret(5), "ret_1m": ret(21), "ret_3m": ret(63), "ret_6m": ret(126), "ret_ytd": ytd,
+        "volume": int(vol.iloc[-1]), "avg_volume_20": int(vol.tail(21).iloc[:-1].mean()) if len(vol) > 1 else None,
+        "volatility_20": round(float(c.pct_change().tail(20).std() * (252 ** 0.5) * 100), 1) if len(c) > 21 else None,
+        "history": [[ts.strftime("%Y-%m-%d"), round(float(v), 2)] for ts, v in c.tail(252).items()],
+    }
+
+
 def _latest(prefix, today):
     p = C.RESULTS_DIR / f"{prefix}_{today.isoformat()}.json"
     try:
@@ -65,6 +89,7 @@ def build(now: datetime | None = None) -> dict:
             log.warning("analyze %s: %s", t, e)
             continue
         r = {k: s.get(k) for k in KEEP}
+        r.update(extra_stats(daily[t], today))
         r["earnings_date"] = earn.get(t)
         r["earnings_in_days"] = mc.earnings_soon(earn.get(t), today)
         r["news"], _ = get_catalyst(t)
