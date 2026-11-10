@@ -10,7 +10,7 @@ on:
       force:
         description: "Run now regardless of time"
         type: choice
-        options: ["", "scan", "summary", "all"]
+        options: ["", "scan", "summary", "all", "export"]
         default: ""
 
 concurrency:
@@ -67,22 +67,32 @@ jobs:
           path: results
           key: results-${{ github.run_id }}
 
-      - name: Build password-protected dashboard
+      - name: Export public market data
+        if: always()
+        run: python export_data.py
+
+      # Market data only (no shares, costs or tokens) goes to gh-pages/data/latest.json
+      # for the online dashboard. The full dashboard is published only encrypted, and only
+      # when DASHBOARD_PASSWORD is set.
+      - name: Build site
+        if: always()
         env:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
         run: |
-          if [ -z "$DASHBOARD_PASSWORD" ]; then
-            echo "::error::DASHBOARD_PASSWORD secret is missing - dashboard not published"
-            exit 1
+          rm -rf publish && mkdir -p publish/data
+          cp results/public_latest.json publish/data/latest.json
+          if [ -n "$DASHBOARD_PASSWORD" ] && [ -f results/dashboard.html ]; then
+            npx --yes staticrypt@3 results/dashboard.html -p "$DASHBOARD_PASSWORD" \
+              -d publish --short --remember 30 --config false \
+              --template-title "Stock Dashboard" --template-instructions "ใส่รหัสผ่านเพื่อดูพอร์ต"
+            mv publish/dashboard.html publish/index.html
+          else
+            echo '<meta charset="utf-8"><p>Stock scanner data: <a href="data/latest.json">data/latest.json</a></p>' > publish/index.html
           fi
-          rm -rf publish && mkdir publish
-          npx --yes staticrypt@3 results/dashboard.html -p "$DASHBOARD_PASSWORD" \
-            -d publish --short --remember 30 --config false \
-            --template-title "Stock Dashboard" --template-instructions "ใส่รหัสผ่านเพื่อดูพอร์ต"
-          mv publish/dashboard.html publish/index.html
           touch publish/.nojekyll
 
-      - name: Publish to gh-pages (encrypted page only)
+      - name: Publish to gh-pages
+        if: always()
         run: |
           cd publish
           git init -q
