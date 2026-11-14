@@ -3,7 +3,7 @@
 Read by the online dashboard. Contains:
   regime            SPY / QQQ / VIX backdrop
   watchlist         price, day change, trend, RSI, 20-day support/resistance, 90-day closes,
-                    next earnings and latest headline for each ticker in watchlist.txt
+                    next earnings, latest headline and 2 years of daily OHLCV for each ticker in watchlist.txt
   scanner_a         latest pre-market gappers today
   scanner_b         latest Trend-join Long hits today
 
@@ -42,6 +42,7 @@ def extra_stats(df, today) -> dict:
     d = df.dropna(subset=["Close"])
     c = d["Close"]
     price = float(c.iloc[-1])
+    y = d.tail(252)
 
     def ret(n):
         return round((price / float(c.iloc[-1 - n]) - 1) * 100, 2) if len(c) > n else None
@@ -49,7 +50,7 @@ def extra_stats(df, today) -> dict:
     prev_year = c[[ts.year < today.year for ts in c.index]]
     ytd = round((price / float(prev_year.iloc[-1]) - 1) * 100, 2) if len(prev_year) else None
     vol = d["Volume"].fillna(0)
-    hi, lo = float(d["High"].max()), float(d["Low"].min())
+    hi, lo = float(y["High"].max()), float(y["Low"].min())
     return {
         "high_52w": round(hi, 2), "low_52w": round(lo, 2),
         "pct_from_high": round((price / hi - 1) * 100, 2),
@@ -58,6 +59,9 @@ def extra_stats(df, today) -> dict:
         "volume": int(vol.iloc[-1]), "avg_volume_20": int(vol.tail(21).iloc[:-1].mean()) if len(vol) > 1 else None,
         "volatility_20": round(float(c.pct_change().tail(20).std() * (252 ** 0.5) * 100), 1) if len(c) > 21 else None,
         "history": [[ts.strftime("%Y-%m-%d"), round(float(v), 2)] for ts, v in c.tail(252).items()],
+        "ohlc": [[ts.strftime("%Y-%m-%d"), round(float(r.Open), 2), round(float(r.High), 2),
+                  round(float(r.Low), 2), round(float(r.Close), 2), int(r.Volume or 0)]
+                 for ts, r in d.tail(504).fillna(0).iterrows()],
     }
 
 
@@ -73,7 +77,7 @@ def build(now: datetime | None = None) -> dict:
     now = now or datetime.now(C.ET)
     today = now.date()
     tickers = load_watchlist()
-    daily = md.daily_bars(tickers, period="1y") if tickers else {}
+    daily = md.daily_bars(tickers, period="2y") if tickers else {}
     try:
         earn = mc.next_earnings(list(daily), today)
     except Exception:
